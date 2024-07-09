@@ -294,6 +294,46 @@ static inline void update_mstatus_fs() {
   }
 }
 
+// Fp Vec CSR check
+/**
+ * Fp CSRs: fflags, frm, fcsr
+ * Access fp CSRs raise EX_II
+ *          1. when mstatus.FS is OFF in non Virt Mode
+ *          2. when mstatus.FS or vsstatus.FS is OFF in Virt Mode
+ * 
+ * Vec CSRs: vstart, vxsat, vxrm, vcsr, vl, vtype, vlenb
+ * Access Vec CSRs raise EX_II
+ *          1. when mstatus.VS is OFF in non Virt Mode
+ *          2. when mstatus.VS or vsstatus.VS is OFF in Virt Mode
+*/
+static inline bool require_fs() {
+  #if !defined(CONFIG_FPU_NONE) || defined(CONFIG_RV_MSTATUS_FS_WRITABLE)
+    if ((mstatus->val & MSTATUS_WMASK_FS) != 0) {
+    #ifdef CONFIG_RVH
+      if (!cpu.v || (vsstatus->val & MSTATUS_WMASK_FS) != 0) {
+        return true;
+      }
+    #endif
+      return true;
+    }
+  #endif
+  return false;
+}
+
+static inline bool require_vs() {
+  #ifdef CONFIG_RVV
+    if ((mstatus->val & MSTATUS_WMASK_RVV) != 0) {
+    #ifdef CONFIG_RVH
+      if (!cpu.v || (vsstatus->val & MSTATUS_WMASK_RVV) != 0) {
+        return true;
+      }
+    #endif
+      return true;
+    }
+  #endif
+  return false;
+}
+
 inline word_t gen_status_sd(word_t status) {
   mstatus_t xstatus = (mstatus_t)status;
   bool fs_dirty = xstatus.fs == EXT_CONTEXT_DIRTY;
@@ -430,17 +470,29 @@ if (is_read(vsie))           { return (mie->val & (hideleg->val & (mideleg->val 
     return mip->val & SIP_MASK;
   }
 #ifdef CONFIG_RVV
-  else if (is_read(vcsr))   { return (vxrm->val & 0x3) << 1 | (vxsat->val & 0x1); }
-  else if (is_read(vlenb))  { return VLEN >> 3; }
+  else if (is_read(vcsr))   {
+    if (!require_vs()) { longjmp_exception(EX_II); }
+    return (vxrm->val & 0x3) << 1 | (vxsat->val & 0x1);
+  }
+  else if (is_read(vlenb))  {
+    if (!require_vs()) { longjmp_exception(EX_II); }
+    return VLEN >> 3;
+  }
+  else if (is_read(vstart) || is_read(vxsat) || is_read(vxrm) || is_read(vl) || is_read(vtype)) {
+    if (!require_vs()) { longjmp_exception(EX_II); }
+  }
 #endif
 #ifndef CONFIG_FPU_NONE
   else if (is_read(fcsr))   {
+    if (!require_fs()) { longjmp_exception(EX_II); }
     return fcsr->val & FCSR_MASK;
   }
   else if (is_read(fflags)) {
+    if (!require_fs()) { longjmp_exception(EX_II); }
     return fcsr->fflags.val & FFLAGS_MASK;
   }
   else if (is_read(frm))    {
+    if (!require_fs()) { longjmp_exception(EX_II); }
     return fcsr->frm & FRM_MASK;
   }
 #endif // CONFIG_FPU_NONE
@@ -671,10 +723,22 @@ static inline void csr_write(word_t *dest, word_t src) {
   else if (is_write(medeleg)) { medeleg->val = mask_bitset(medeleg->val, MEDELEG_MASK, src); }
   else if (is_write(mideleg)) { *dest = src & 0x222; }
 #ifdef CONFIG_RVV
-  else if (is_write(vcsr)) { *dest = src & 0b111; vxrm->val = (src >> 1) & 0b11; vxsat->val = src & 0b1; }
-  else if (is_write(vxrm)) { *dest = src & 0b11; vcsr->val = (vxrm->val) << 1 | vxsat->val; }
-  else if (is_write(vxsat)) { *dest = src & 0b1; vcsr->val = (vxrm->val) << 1 | vxsat->val; }
-  else if (is_write(vstart)) { *dest = src & (VLEN - 1); }
+  else if (is_write(vcsr)) {
+    if (!require_vs()) { longjmp_exception(EX_II); }
+    *dest = src & 0b111; vxrm->val = (src >> 1) & 0b11; vxsat->val = src & 0b1;
+  }
+  else if (is_write(vxrm)) {
+    if (!require_vs()) { longjmp_exception(EX_II); }
+    *dest = src & 0b11; vcsr->val = (vxrm->val) << 1 | vxsat->val;
+  }
+  else if (is_write(vxsat)) {
+    if (!require_vs()) { longjmp_exception(EX_II); }
+    *dest = src & 0b1; vcsr->val = (vxrm->val) << 1 | vxsat->val;
+  }
+  else if (is_write(vstart)) {
+    if (!require_vs()) { longjmp_exception(EX_II); }
+    *dest = src & (VLEN - 1);
+  }
 #endif
 #ifdef CONFIG_MISA_UNCHANGEABLE
   else if (is_write(misa)) { /* do nothing */ }
@@ -683,16 +747,19 @@ static inline void csr_write(word_t *dest, word_t src) {
   else if (is_write(sepc)) { *dest = src & (~0x1UL); }
 #ifndef CONFIG_FPU_NONE
   else if (is_write(fflags)) {
+    if (!require_fs()) { longjmp_exception(EX_II); }
     *dest = src & FFLAGS_MASK;
     fcsr->val = (frm->val)<<5 | fflags->val;
     // fcsr->fflags.val = src;
   }
   else if (is_write(frm)) {
+    if (!require_fs()) { longjmp_exception(EX_II); }
     *dest = src & FRM_MASK;
     fcsr->val = (frm->val)<<5 | fflags->val;
     // fcsr->frm = src;
   }
   else if (is_write(fcsr)) {
+    if (!require_fs()) { longjmp_exception(EX_II); }
     *dest = src & FCSR_MASK;
     fflags->val = src & FFLAGS_MASK;
     frm->val = ((src)>>5) & FRM_MASK;
@@ -843,6 +910,7 @@ static inline void csr_write(word_t *dest, word_t src) {
 
 #ifdef CONFIG_RVV
   if (is_write(vcsr) || is_write(vstart) || is_write(vxsat) || is_write(vxrm)) {
+    if (!require_vs()) { longjmp_exception(EX_II); }
     vp_set_dirty();
   }
 #endif //CONFIG_RVV
