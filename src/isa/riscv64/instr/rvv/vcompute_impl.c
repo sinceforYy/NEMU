@@ -997,6 +997,7 @@ void permutaion_instr(int opcode, Decode *s) {
 
 void floating_arthimetic_instr(int opcode, int is_signed, int widening, int dest_mask, Decode *s) {
   require_vector(true);
+  uint32_t rm = isa_fp_get_frm();
   if (dest_mask) {
     if (s->src_vmode == SRC_VV) {
       vector_mvv_check(s, true);
@@ -1150,7 +1151,7 @@ void floating_arthimetic_instr(int opcode, int is_signed, int widening, int dest
       case FRSQRT7 : rtl_hostcall(s, HOSTCALL_VFP, s1, s0, s1, FPCALL_CMD(FPCALL_RSQRT7, FPCALL_TYPE)); break;
       case FREC7 : rtl_hostcall(s, HOSTCALL_VFP, s1, s0, s1, FPCALL_CMD(FPCALL_REC7, FPCALL_TYPE)); break;
       case FCLASS : rtl_hostcall(s, HOSTCALL_VFP, s1, s0, s1, FPCALL_CMD(FPCALL_CLASS, FPCALL_TYPE)); break;
-      case FMERGE : rtl_mux(s, s1, &mask, s1, s0); break;
+      case FMERGE : isa_fp_rm_check(rm); rtl_mux(s, s1, &mask, s1, s0); break;
       case MFEQ : rtl_hostcall(s, HOSTCALL_VFP, s1, s0, s1, FPCALL_CMD(FPCALL_EQ, FPCALL_TYPE)); break;
       case MFNE : rtl_hostcall(s, HOSTCALL_VFP, s1, s0, s1, FPCALL_CMD(FPCALL_NE, FPCALL_TYPE)); break;
       case MFLT : rtl_hostcall(s, HOSTCALL_VFP, s1, s0, s1, FPCALL_CMD(FPCALL_LT, FPCALL_TYPE)); break;
@@ -1182,9 +1183,11 @@ void floating_arthimetic_instr(int opcode, int is_signed, int widening, int dest
       case FNCVT_FF : rtl_hostcall(s, HOSTCALL_VFP, s1, s0, s1, FPCALL_CMD(FPCALL_DFToF, FPCALL_TYPE)); break;
       case FNCVT_ROD_FF : rtl_hostcall(s, HOSTCALL_VFP, s1, s0, s1, FPCALL_CMD(FPCALL_DFToF_ODD, FPCALL_TYPE)); break;
       case FSLIDE1UP :
+        isa_fp_rm_check(rm);
         if (idx > 0) get_vreg(id_src2->reg, idx - 1, s1, vtype->vsew, vtype->vlmul, 0, 1);
         break;
       case FSLIDE1DOWN :
+        isa_fp_rm_check(rm);
         if (idx < vl->val - 1) get_vreg(id_src2->reg, idx + 1, s1, vtype->vsew, vtype->vlmul, 0, 1);
         break;
     }
