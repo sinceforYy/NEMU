@@ -261,10 +261,16 @@ static inline word_t* csr_decode(uint32_t addr) {
 #define MENVCFG_WMASK_STCE MUXDEF(CONFIG_RV_SSTC, (0x1UL << 63), 0)
 #define MENVCFG_WMASK_PBMTE MUXDEF(CONFIG_RV_SVPBMT, (0x1UL << 62), 0)
 #define MENVCFG_WMASK_DTE  MUXDEF(CONFIG_RV_SSDBLTRP, (0x1UL << 59), 0)
+#define MENVCFG_WMASK_CBZE MUXDEF(CONFIG_RV_CBO, (0x1UL << 7), 0)
+#define MENVCFG_WMASK_CBCFE MUXDEF(CONFIG_RV_CBO, (0x1UL << 6), 0)
+#define MENVCFG_WMASK_CBIE MUXDEF(CONFIG_RV_CBO, (0x3UL << 4), 0)
 #define MENVCFG_WMASK (    \
   MENVCFG_WMASK_STCE     | \
   MENVCFG_WMASK_PBMTE    | \
-  MENVCFG_WMASK_DTE        \
+  MENVCFG_WMASK_DTE      | \
+  MENVCFG_WMASK_CBZE     | \
+  MENVCFG_WMASK_CBCFE    | \
+  MENVCFG_WMASK_CBIE       \
 )
 #define HENVCFG_WMASK MENVCFG_WMASK
 
@@ -1271,13 +1277,14 @@ static inline void csr_write(word_t *dest, word_t src) {
   else if(is_write(hip)) { hvip->val = mask_bitset(hvip->val, HIP_WMASK & (mideleg->val | MIDELEG_FORCED_MASK), src); }
   else if(is_write(hvip)) { hvip->val = mask_bitset(hvip->val, HVIP_MASK, src); }
   else if(is_write(henvcfg)){
-    henvcfg->val = mask_bitset(henvcfg->val, HENVCFG_WMASK, src);
+    if (!(((src & MENVCFG_WMASK_CBIE) >> 4) == 2)) {
+      henvcfg->val = mask_bitset(henvcfg->val, HENVCFG_WMASK, src);
+    }
   #ifdef CONFIG_RV_SSDBLTRP
     if(henvcfg->dte == 0) {
       vsstatus->sdt = 0;
     }
   #endif // CONFIG_RV_SSDBLTRP
-
   }
 #ifdef CONFIG_RV_AIA
   else if (is_write(hvien)) { hvien->val = mask_bitset(hvien->val, HVIEN_MSAK, src); }
@@ -1354,7 +1361,9 @@ static inline void csr_write(word_t *dest, word_t src) {
     if (src & MSTATUS_WMASK_SDT) { mstatus->sie = 0; }
   #endif //CONFIG_RV_SSDBLTRP
   }else if(is_write(menvcfg)) {
-    menvcfg->val = mask_bitset(menvcfg->val, MENVCFG_WMASK, src);
+    if (!(((src & MENVCFG_WMASK_CBIE) >> 4) == 2)) {
+      menvcfg->val = mask_bitset(menvcfg->val, MENVCFG_WMASK, src);
+    }
 #ifdef CONFIG_RV_SSDBLTRP
     if(menvcfg->dte == 0) {
       mstatus->sdt = 0;
