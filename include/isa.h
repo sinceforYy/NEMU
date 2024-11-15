@@ -88,5 +88,8 @@ void isa_difftest_set_mhartid(int n);
 #endif
 void isa_update_mip(unsigned lcofip);
 void isa_update_mhpmcounter_overflow(uint64_t mhpmeventOverflowVec);
+#ifdef CONFIG_RV_IMSIC
+void isa_update_vstopi();
+#endif
 
 #endif

@@ -438,3 +438,9 @@ void isa_update_mhpmcounter_overflow(uint64_t mhpmeventOverflowVec) {
   }
 #endif
 }
+
+#ifdef CONFIG_RV_IMSIC
+void isa_update_vstopi() {
+  update_vstopi();
+}
+#endif

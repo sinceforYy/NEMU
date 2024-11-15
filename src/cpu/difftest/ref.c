@@ -268,6 +268,13 @@ void difftest_get_store_event_other_info(void *info) {
 
 
 
+void difftest_aia_xtopei(void *xtopei) {
+#ifdef CONFIG_RV_IMSIC
+  memcpy(&cpu.xtopei, xtopei, sizeof(struct Xtopei));
+  isa_update_vstopi();
+#endif
+}
+
 void difftest_enable_debug() {
 #ifdef CONFIG_SHARE
   dynamic_config.debug_difftest = true;
